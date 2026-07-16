@@ -1,0 +1,1 @@
+<div class="banner success" x-data x-init="$dispatch('scraping-complete')"><strong>{{ written }} of {{ written + skipped }} amounts written.</strong>{% if skipped %} {{ skipped }} account{{ '' if skipped == 1 else 's' }} had no PAID challan: {{ skipped_gstins|join(', ') }}.{% endif %}<br><a class="download" href="/download">Download Completed Excel</a></div>

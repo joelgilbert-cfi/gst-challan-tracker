@@ -1,0 +1,5 @@
+<tr id="row-{{ acc.gstin }}">
+  <td>{{ index if index else loop.index if loop is defined else '—' }}</td><td>{{ acc.state }}</td><td>{{ acc.gstin }}</td><td>{{ acc.username }}</td>
+  <td><span x-data="{show:false,password:{{ acc.password|tojson }}}"><span x-text="show ? password : '•••••••'"></span> <button class="icon-button" type="button" @click="show=!show" aria-label="Toggle password visibility">👁</button></span></td>
+  <td class="actions"><button hx-get="/credentials/{{ acc.gstin }}/edit-form" hx-target="#row-{{ acc.gstin }}" hx-swap="outerHTML">Edit</button><button class="danger" hx-delete="/credentials/{{ acc.gstin }}" hx-target="#row-{{ acc.gstin }}" hx-swap="outerHTML" hx-confirm="Delete {{ acc.state }}?">Delete</button></td>
+</tr>

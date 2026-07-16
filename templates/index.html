@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GST Challan Automation</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+  <script src="https://unpkg.com/htmx.org/dist/ext/sse.js"></script>
+</head>
+<body>
+  <nav><span class="brand">GST Automation</span><span class="nav-links"><a class="active" href="/">Upload &amp; Run</a><a href="/accounts">Manage Accounts</a></span></nav>
+  <main x-data="gstUpload()" x-on:scraping-complete.window="scrapingDone = true" x-on:account-start.window="currentIndex = $event.detail.index; total = $event.detail.total">
+    <section x-show="screen === 'upload'" x-cloak>
+      <h1>GST Challan Automation</h1>
+      <p class="subtitle">Upload the consultant's Excel file to begin</p>
+      <div class="upload-zone" :class="{'dragging': dragging}" @click="$refs.fileInput.click()" @dragover.prevent="dragging=true" @dragleave.prevent="dragging=false" @drop.prevent="dropFile($event)">
+        <div class="upload-icon">⇧</div><strong>Drop your .xlsx file here or click to browse</strong>
+        <input x-ref="fileInput" type="file" accept=".xlsx" hidden @change="selectFile($event.target.files[0])">
+      </div>
+      <p x-show="file" class="file-name" x-text="fileLabel"></p>
+      <p x-show="error" class="message error" x-text="error"></p>
+      <button x-show="file" @click="processFile()" :disabled="busy"><span x-show="!busy">Process File</span><span x-show="busy">Analysing Excel file…</span></button>
+    </section>
+
+    <section x-show="screen === 'ready'" x-cloak>
+      <h1>Ready to run</h1>
+      <div class="banner success">✓ Excel processed — GST Utilization Entry sheet prepared</div>
+      <div class="info-card"><div><span>States detected</span><strong x-text="statesFound"></strong></div><div><span>Period</span><strong x-text="narrationMonth"></strong></div><div><span>File</span><strong x-text="filename"></strong></div></div>
+      <p>Click Start below. A Chrome window will open on your screen. For each account, type the captcha in that Chrome window and click Login — the script handles everything else automatically.</p>
+      <div x-show="credCount === 0" class="banner warning">⚠ No accounts configured. <a href="/accounts">Go to Manage Accounts first.</a></div>
+      <p x-show="error" class="message error" x-text="error"></p>
+      <button @click="startScraping()" :disabled="credCount === 0 || busy"><span x-show="!busy">Start GST Portal Logins</span><span x-show="busy">Starting…</span></button>
+    </section>
+
+    <section x-show="screen === 'scraping'" x-cloak>
+      <h1>GST portal logins in progress</h1>
+      <div class="current-card"><div id="current-account">Waiting for browser automation to begin…</div><div class="progress-track"><span :style="`width: ${total ? (currentIndex / total) * 100 : 0}%`"></span></div><p id="status-message">Opening Chrome…</p></div>
+      <div hx-ext="sse" sse-connect="/progress-stream" sse-swap="status" hx-target="#status-message"></div>
+      <div hx-ext="sse" sse-connect="/progress-stream" sse-swap="account_start" hx-target="#current-account"></div>
+      <div hx-ext="sse" sse-connect="/progress-stream" sse-swap="account_done" hx-swap="beforeend" hx-target="#results-tbody"></div>
+      <div hx-ext="sse" sse-connect="/progress-stream" sse-swap="all_done" hx-target="#completion-banner"></div>
+      <table class="results"><thead><tr><th>#</th><th>State</th><th>GSTIN</th><th>Amount</th><th>Status</th></tr></thead><tbody id="results-tbody"></tbody></table>
+      <div id="completion-banner" x-show="scrapingDone" x-cloak></div>
+    </section>
+  </main>
+  <script>
+    function gstUpload() { return {
+      screen: 'upload', filename: '', statesFound: 0, narrationMonth: '', scrapingDone: false, written: 0, skipped: 0,
+      file: null, fileLabel: '', error: '', busy: false, dragging: false, credCount: {{ cred_count }}, currentIndex: 0, total: 0,
+      selectFile(file) { if (!file) return; this.file=file; this.fileLabel=`${file.name} (${(file.size/1024).toFixed(1)} KB)`; this.error=''; },
+      dropFile(event) { this.dragging=false; this.selectFile(event.dataTransfer.files[0]); },
+      async processFile() { this.busy=true; this.error=''; const body=new FormData(); body.append('file', this.file); try { const r=await fetch('/upload',{method:'POST',body}); const data=await r.json(); if(!r.ok || !data.ok) throw new Error(data.error || 'Could not process this file'); Object.assign(this,{statesFound:data.states_found,narrationMonth:data.narration_month,filename:data.filename,credCount:data.cred_count,screen:'ready'}); } catch(e) { this.error=e.message; } finally { this.busy=false; } },
+      async startScraping() { this.busy=true; this.error=''; try { const r=await fetch('/start-scraping',{method:'POST'}); const data=await r.json(); if(!r.ok || !data.ok) throw new Error(data.error || 'Could not start scraping'); this.screen='scraping'; } catch(e) { this.error=e.message; } finally { this.busy=false; } }
+    } }
+    document.body.addEventListener('htmx:afterSwap', event => { const target = event.detail.target; if (target && target.id === 'current-account') { const text=target.textContent; const match=text.match(/Processing Account (\d+) of (\d+)/); if(match) window.dispatchEvent(new CustomEvent('account-start',{detail:{index:+match[1],total:+match[2]}})); } });
+  </script>
+</body>
+</html>

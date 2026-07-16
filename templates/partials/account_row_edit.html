@@ -1,0 +1,8 @@
+<tr id="row-{{ acc.gstin if acc.gstin else 'new' }}" class="edit-row">
+  <td>—</td><td><input type="text" name="state" value="{{ acc.state }}" required></td><td><input type="text" name="gstin" value="{{ acc.gstin }}" oninput="this.value=this.value.toUpperCase()" required></td><td><input type="text" name="username" value="{{ acc.username }}" required></td><td><input type="text" name="password" value="{{ acc.password }}" required></td>
+  <td class="actions">
+    {% if mode == 'add' %}<button hx-post="/credentials" hx-include="closest tr" hx-target="closest tr" hx-swap="outerHTML">Save</button><button type="button" @click="$el.closest('tr').remove()">Cancel</button>
+    {% else %}<button hx-put="/credentials/{{ acc.gstin }}" hx-include="closest tr" hx-target="#row-{{ acc.gstin }}" hx-swap="outerHTML">Save</button><button hx-get="/credentials/{{ acc.gstin }}/row" hx-target="#row-{{ acc.gstin }}" hx-swap="outerHTML">Cancel</button>{% endif %}
+    {% if error %}<p class="inline-error">{{ error }}</p>{% endif %}
+  </td>
+</tr>

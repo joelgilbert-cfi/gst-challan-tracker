@@ -1,0 +1,1 @@
+<tr class="{{ 'found' if found else ('error' if error and error != 'No PAID challan found for the current month' else 'not-found') }}"><td>{{ index }}</td><td>{{ state }}</td><td>{{ gstin }}</td><td>{{ '₹{:,}'.format(amount) if amount is not none else '—' }}</td><td>{{ '✓ Paid' if found else ('⚠ ' + error if error else '⚠ Not found') }}</td></tr>

@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Manage GST Accounts</title><link rel="stylesheet" href="/static/style.css">
+  <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script><script src="https://unpkg.com/htmx.org@1.9.12"></script>
+</head>
+<body>
+  <nav><span class="brand">GST Automation</span><span class="nav-links"><a href="/">Upload &amp; Run</a><a class="active" href="/accounts">Manage Accounts</a></span></nav>
+  <main x-data="{ count: {{ credentials|length }} }" @account-added.window="count++" @account-deleted.window="count=Math.max(0,count-1)">
+    <div class="heading-row"><div><h1>Manage GST Accounts</h1><p class="subtitle">Add, edit, or remove GST portal login credentials</p></div><button hx-get="/credentials/new-row-form" hx-target="#accounts-tbody" hx-swap="beforeend" @click="document.getElementById('empty-state')?.remove()">Add Account</button></div>
+    <div class="table-wrap"><table><thead><tr><th>#</th><th>State</th><th>GSTIN</th><th>Username</th><th>Password</th><th>Actions</th></tr></thead><tbody id="accounts-tbody">
+      {% for acc in credentials %}{% include "partials/account_row.html" %}{% else %}<tr id="empty-state"><td colspan="6" class="empty">No accounts configured yet. Click 'Add Account' to get started.</td></tr>{% endfor %}
+    </tbody></table></div>
+    <p class="muted"><span x-text="count"></span> accounts configured</p>
+  </main>
+  <script>document.body.addEventListener('account-added', () => window.dispatchEvent(new Event('account-added'))); document.body.addEventListener('account-deleted', () => window.dispatchEvent(new Event('account-deleted')));</script>
+</body></html>
