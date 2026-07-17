@@ -116,6 +116,11 @@ def run(workbook, values_workbook=None) -> dict:
     normal workbook remains intact for the completed download.
     """
     source = _find_source(values_workbook or workbook)
+    # The Written off formula must recalculate when a receipt amount or a
+    # manual Interest entry is changed in Excel.
+    workbook.calculation.calcMode = "auto"
+    workbook.calculation.fullCalcOnLoad = True
+    workbook.calculation.forceFullCalc = True
     narration_month = _narration_month(source.cell(1, 3).value, source.cell(2, 3).value)
     rows = _find_rows(source)
     blocks = _find_blocks(source)
@@ -195,6 +200,23 @@ def run(workbook, values_workbook=None) -> dict:
             if key == "ICICI":
                 icici_rows[block["gstin"]] = row
         totals_row = first_account_row + 16
+        written_off_row = totals_row - 1
+        # Balance the state block without creating a circular reference: the
+        # Written off row compares the debit/credit entries above itself.  A
+        # debit surplus is credited; a credit surplus is debited as a positive
+        # amount, exactly as requested.
+        debit_before_write_off = f"SUM(E{first_account_row}:E{written_off_row - 1})"
+        credit_before_write_off = f"SUM(F{first_account_row}:F{written_off_row - 1})"
+        target.cell(
+            written_off_row,
+            5,
+            f'=IF({credit_before_write_off}>{debit_before_write_off},{credit_before_write_off}-{debit_before_write_off},"")',
+        )
+        target.cell(
+            written_off_row,
+            6,
+            f'=IF({debit_before_write_off}>{credit_before_write_off},{debit_before_write_off}-{credit_before_write_off},"")',
+        )
         for amount_col, formula in (
             (5, f"=SUM(E{first_account_row}:E{first_account_row + 15})"),
             (6, f"=SUM(F{first_account_row}:F{first_account_row + 15})"),
@@ -204,6 +226,26 @@ def run(workbook, values_workbook=None) -> dict:
             target.cell(totals_row, amount_col).number_format = amount_format
         # The reference has two ordinary blank rows between state blocks.
         current_row += 20
+
+    # Use the final separator row for the bank reconciliation, matching the
+    # legacy worksheet layout.  ICICI Bank is deliberately summed by its
+    # known rows rather than summing the whole Credit column.
+    reconciliation_row = current_row - 1
+    icici_credit_cells = ",".join(f"F{row}" for row in icici_rows.values())
+    target.cell(reconciliation_row, 4, "Bank total")
+    target.cell(reconciliation_row, 5, "ICICI Bank")
+    target.cell(reconciliation_row, 6, f"=SUM({icici_credit_cells})")
+    target.cell(reconciliation_row + 1, 5, "As Per Approval")
+    # F(reconciliation_row + 1) is intentionally blank for manual entry.
+    target.cell(reconciliation_row + 2, 5, "Diff")
+    target.cell(
+        reconciliation_row + 2,
+        6,
+        f'=IF(F{reconciliation_row + 1}="","",F{reconciliation_row}-F{reconciliation_row + 1})',
+    )
+    for row in (reconciliation_row, reconciliation_row + 1, reconciliation_row + 2):
+        target.cell(row, 6).alignment = right
+        target.cell(row, 6).number_format = "#,##0.00"
 
     # Excel displays the filter drop-downs in the first state header row while
     # retaining every subsequent state block beneath the same filter range.
