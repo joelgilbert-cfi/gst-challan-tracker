@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from numbers import Number
 
-from openpyxl.styles import Font
+from openpyxl.styles import Alignment, Font
 
 
 MONTHS_LONG = [
@@ -107,9 +107,15 @@ def _narration_month(year_value, month_value) -> str:
     return f"{MONTHS_SHORT[period_index]}-{period_year % 100:02d}"
 
 
-def run(workbook) -> dict:
-    """Modify *workbook* in place and return metadata needed by the scraper."""
-    source = _find_source(workbook)
+def run(workbook, values_workbook=None) -> dict:
+    """Modify *workbook* in place and return metadata needed by the scraper.
+
+    ``values_workbook`` is the same uploaded file opened with ``data_only``.
+    The Consultant sheet uses Excel formulas for ITC and cash utilisation;
+    reading from that workbook gives their saved calculated values while the
+    normal workbook remains intact for the completed download.
+    """
+    source = _find_source(values_workbook or workbook)
     narration_month = _narration_month(source.cell(1, 3).value, source.cell(2, 3).value)
     rows = _find_rows(source)
     blocks = _find_blocks(source)
@@ -117,17 +123,27 @@ def run(workbook) -> dict:
     if "GST Utilization Entry" in workbook.sheetnames:
         del workbook["GST Utilization Entry"]
     target = workbook.create_sheet("GST Utilization Entry")
+    # Mirror the existing Excel entry template.  It deliberately keeps the
+    # standard gridline/Calibri look rather than adding colours or borders.
     bold = Font(bold=True)
-    target.cell(2, 1, "GST Number").font = bold
-    target.column_dimensions["A"].width = 20
-    target.column_dimensions["B"].width = 3
-    target.column_dimensions["C"].width = 38
-    target.column_dimensions["D"].width = 43
-    target.column_dimensions["E"].width = 17
-    target.column_dimensions["F"].width = 17
-    target.column_dimensions["H"].width = 55
+    gstin_font = Font(color="0563C1")
+    new_font = Font(color="FF0000")
+    left = Alignment(horizontal="left", vertical="center")
+    right = Alignment(horizontal="right", vertical="center")
+    amount_format = '#,##0.00;-#,##0.00;-'
+    target.sheet_view.showGridLines = True
+    target.cell(3, 1, "GST Number").alignment = left
+    target.cell(3, 4, "New").font = new_font
+    target.cell(3, 4).alignment = left
+    # These are the column positions and proportions of the existing entry
+    # sheet.  B and G are intentionally blank working/separator columns.
+    for column, width in {
+        "A": 22, "B": 11, "C": 31, "D": 46, "E": 15,
+        "F": 15, "G": 15, "H": 56, "I": 8, "J": 8,
+    }.items():
+        target.column_dimensions[column].width = width
 
-    current_row = 3
+    current_row = 4
     icici_rows: dict[str, int] = {}
     for block in blocks:
         col = block["col"]
@@ -157,23 +173,41 @@ def run(workbook) -> dict:
             "TCS_CGST": _value(source, rows["CASH_UTILISED"], col, 2),
         }
 
-        for cell, value in ((1, block["gstin"]), (3, block["state"]), (5, "Debit"), (6, "Credit")):
-            target.cell(current_row, cell, value).font = bold
+        header_cells = ((1, block["gstin"], left), (3, block["state"], left), (5, "Debit", left), (6, "Credit", left))
+        for cell, value, alignment in header_cells:
+            target.cell(current_row, cell, value).font = gstin_font if cell == 1 else Font()
+            target.cell(current_row, cell).alignment = alignment
         first_account_row = current_row + 1
         for index, (key, label, account_code, side, manual) in enumerate(ACCOUNT_LINES):
             row = first_account_row + index
             target.cell(row, 3, label)
+            target.cell(row, 3).alignment = left
             target.cell(row, 4, f"101.999999999.{account_code}.999.{block['gstin'][:2]}.999.999.99999.9999999")
+            target.cell(row, 4).alignment = left
             target.cell(row, 8, f"GST-{label.strip()}- Payment {narration_month}")
+            target.cell(row, 8).alignment = left
+            for amount_col in (5, 6):
+                target.cell(row, amount_col).alignment = right
+                target.cell(row, amount_col).number_format = amount_format
             amount = amounts.get(key, 0)
-            if not manual and amount:
+            if not manual:
                 target.cell(row, 5 if side == "Debit" else 6, amount)
             if key == "ICICI":
                 icici_rows[block["gstin"]] = row
         totals_row = first_account_row + 16
-        target.cell(totals_row, 5, f"=SUM(E{first_account_row}:E{first_account_row + 15})").font = bold
-        target.cell(totals_row, 6, f"=SUM(F{first_account_row}:F{first_account_row + 15})").font = bold
-        current_row += 19
+        for amount_col, formula in (
+            (5, f"=SUM(E{first_account_row}:E{first_account_row + 15})"),
+            (6, f"=SUM(F{first_account_row}:F{first_account_row + 15})"),
+        ):
+            target.cell(totals_row, amount_col, formula).font = bold
+            target.cell(totals_row, amount_col).alignment = right
+            target.cell(totals_row, amount_col).number_format = amount_format
+        # The reference has two ordinary blank rows between state blocks.
+        current_row += 20
+
+    # Excel displays the filter drop-downs in the first state header row while
+    # retaining every subsequent state block beneath the same filter range.
+    target.auto_filter.ref = f"A4:H{current_row - 1}"
 
     return {
         "narration_month": narration_month,
