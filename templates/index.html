@@ -39,17 +39,17 @@
         <template x-for="item in results" :key="item.filename"><tr :class="item.status === 'written' ? 'found' : (item.status === 'error' ? 'error' : 'not-found')"><td x-text="item.filename"></td><td x-text="item.gstin || '—'"></td><td x-text="item.state || '—'"></td><td x-text="item.amount == null ? '—' : '₹' + Number(item.amount).toLocaleString('en-IN')"></td><td x-text="item.message"></td></tr></template>
       </tbody></table>
       <p x-show="unmatched || duplicates || errors" class="banner warning"><span x-text="unmatched + duplicates + errors"></span> receipt<span x-show="unmatched + duplicates + errors !== 1">s</span> could not be applied. Review the table before downloading.</p>
-      <p><a class="download button-link" href="/download">Download Completed Excel</a> <button class="secondary" @click="reset()">Process another set</button></p>
+      <p><a class="download button-link" :href="downloadUrl">Download Completed Excel</a> <button class="secondary" @click="reset()">Process another set</button></p>
     </section>
   </main>
   <script>
     function receiptUpload() { return {
       screen: 'upload', excelFile: null, receiptFiles: [], excelLabel: '', error: '', busy: false, excelDragging: false, receiptsDragging: false,
-      statesFound: 0, narrationMonth: '', receiptsUploaded: 0, written: 0, unmatched: 0, duplicates: 0, errors: 0, results: [],
+      statesFound: 0, narrationMonth: '', receiptsUploaded: 0, written: 0, unmatched: 0, duplicates: 0, errors: 0, results: [], downloadUrl: '',
       setExcel(file) { this.excelDragging=false; if (!file) return; this.excelFile=file; this.excelLabel=`${file.name} (${(file.size/1024).toFixed(1)} KB)`; this.error=''; },
       setReceipts(files) { this.receiptsDragging=false; const selected=Array.from(files || []).filter(file => file.name.toLowerCase().endsWith('.pdf')); if (!selected.length) { this.error='Please select one or more PDF receipts.'; return; } this.receiptFiles=selected; this.error=''; },
-      async process() { this.busy=true; this.error=''; const body=new FormData(); body.append('file', this.excelFile); this.receiptFiles.forEach(file => body.append('receipts', file)); try { const response=await fetch('/upload',{method:'POST',body}); const data=await response.json(); if(!response.ok || !data.ok) throw new Error(data.error || 'Could not process these files'); Object.assign(this,{statesFound:data.states_found,narrationMonth:data.narration_month,receiptsUploaded:data.receipts_uploaded,written:data.written,unmatched:data.unmatched,duplicates:data.duplicates,errors:data.errors,results:data.results,screen:'complete'}); } catch(error) { this.error=error.message; } finally { this.busy=false; } },
-      reset() { this.screen='upload'; this.excelFile=null; this.receiptFiles=[]; this.excelLabel=''; this.error=''; this.results=[]; this.$refs.excelInput.value=''; this.$refs.receiptInput.value=''; }
+      async process() { this.busy=true; this.error=''; const body=new FormData(); body.append('file', this.excelFile); this.receiptFiles.forEach(file => body.append('receipts', file)); try { const response=await fetch('/upload',{method:'POST',body}); const data=await response.json(); if(!response.ok || !data.ok) throw new Error(data.error || 'Could not process these files'); Object.assign(this,{statesFound:data.states_found,narrationMonth:data.narration_month,receiptsUploaded:data.receipts_uploaded,written:data.written,unmatched:data.unmatched,duplicates:data.duplicates,errors:data.errors,results:data.results,downloadUrl:data.download_url,screen:'complete'}); } catch(error) { this.error=error.message; } finally { this.busy=false; } },
+      reset() { this.screen='upload'; this.excelFile=null; this.receiptFiles=[]; this.excelLabel=''; this.error=''; this.results=[]; this.downloadUrl=''; this.$refs.excelInput.value=''; this.$refs.receiptInput.value=''; }
     } }
   </script>
 </body>

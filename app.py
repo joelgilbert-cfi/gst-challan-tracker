@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import io
+import secrets
+import time
 from pathlib import Path
 from urllib.parse import quote
 
@@ -21,14 +23,28 @@ app = FastAPI(title="GST Challan Receipt Automation")
 app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
 templates = Jinja2Templates(directory=ROOT / "templates")
 
-state = {
-    "workbook": None,
-    "filename": "",
-    "narration_month": "",
-    "states_found": 0,
-    "receipt_results": [],
-    "receipts_processed": False,
-}
+DOWNLOAD_TTL_SECONDS = 30 * 60
+completed_workbooks: dict[str, dict] = {}
+
+
+def _discard_expired_workbooks() -> None:
+    """Remove completed uploads that were not downloaded within 30 minutes."""
+    now = time.monotonic()
+    for token, item in list(completed_workbooks.items()):
+        if item["expires_at"] <= now:
+            del completed_workbooks[token]
+
+
+def _store_completed_workbook(workbook, filename: str) -> str:
+    """Return an unguessable, short-lived URL for one user's workbook."""
+    _discard_expired_workbooks()
+    token = secrets.token_urlsafe(32)
+    completed_workbooks[token] = {
+        "workbook": workbook,
+        "filename": filename,
+        "expires_at": time.monotonic() + DOWNLOAD_TTL_SECONDS,
+    }
+    return f"/download/{token}"
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -87,17 +103,11 @@ async def upload(
         receipt_results.append({**receipt, "status": "written", "message": "Amount written to ICICI Bank credit"})
         written += 1
 
-    state.update({
-        "workbook": workbook,
-        "filename": Path(file.filename).name,
-        "narration_month": result["narration_month"],
-        "states_found": result["states_found"],
-        "receipt_results": receipt_results,
-        "receipts_processed": True,
-    })
+    filename = Path(file.filename).name
+    download_url = _store_completed_workbook(workbook, filename)
     return {
         "ok": True,
-        "filename": Path(file.filename).name,
+        "filename": filename,
         "narration_month": result["narration_month"],
         "states_found": result["states_found"],
         "receipts_uploaded": len(receipts_files),
@@ -106,19 +116,20 @@ async def upload(
         "duplicates": sum(item["status"] == "duplicate" for item in receipt_results),
         "errors": sum(item["status"] == "error" for item in receipt_results),
         "results": receipt_results,
+        "download_url": download_url,
     }
 
 
-@app.get("/download")
-async def download():
-    if state["workbook"] is None:
-        raise HTTPException(status_code=400, detail="No file available - please upload again")
-    if not state["receipts_processed"]:
-        raise HTTPException(status_code=400, detail="Receipts have not been processed")
+@app.get("/download/{token}")
+async def download(token: str):
+    _discard_expired_workbooks()
+    item = completed_workbooks.get(token)
+    if item is None:
+        raise HTTPException(status_code=404, detail="This download link has expired - please upload again")
     buffer = io.BytesIO()
-    state["workbook"].save(buffer)
+    item["workbook"].save(buffer)
     buffer.seek(0)
-    safe_name = f"{Path(state['filename'] or 'gst_utilization').stem}_completed.xlsx"
+    safe_name = f"{Path(item['filename'] or 'gst_utilization').stem}_completed.xlsx"
     return StreamingResponse(
         buffer,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
