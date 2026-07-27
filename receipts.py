@@ -1,4 +1,4 @@
-"""Extract paid GST challan amounts from digital GST Payment Receipt PDFs."""
+"""Extract GST challan amounts from digital GST PDFs."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ STATE_RE = re.compile(r"\b([A-Z][A-Za-z ]+?)\s*,\s*\d{6}\b")
 def extract_receipt(data: bytes, filename: str) -> dict:
     """Return the GSTIN, total paid amount, and optional state from one PDF.
 
-    Raises ValueError when a file is not a usable digital GST payment receipt.
+    Raises ValueError when a file does not contain a GSTIN and total amount.
     """
     try:
         reader = PdfReader(io.BytesIO(data))
@@ -28,8 +28,8 @@ def extract_receipt(data: bytes, filename: str) -> dict:
     except Exception as exc:
         raise ValueError("could not read this PDF") from exc
 
-    if "PAYMENT RECEIPT" not in text.upper() or "GSTIN" not in text.upper():
-        raise ValueError("is not a GST Payment Receipt")
+    if "GSTIN" not in text.upper():
+        raise ValueError("does not contain a GSTIN")
 
     gstins = {match.upper() for match in GSTIN_RE.findall(text)}
     if len(gstins) != 1:
