@@ -1,5 +1,0 @@
-2026/07/16-15:16:40.429 3ef8 Creating DB C:\CFI\Projects\Prototypes\gst_scraper\chrome-gst-automation\Default\Local Storage\leveldb since it was missing.
-2026/07/16-15:16:40.469 3ef8 Reusing MANIFEST C:\CFI\Projects\Prototypes\gst_scraper\chrome-gst-automation\Default\Local Storage\leveldb/MANIFEST-000001
-2026/07/16-15:17:49.935 6d00 Level-0 table #5: started
-2026/07/16-15:17:49.956 6d00 Level-0 table #5: 73893 bytes OK
-2026/07/16-15:17:49.960 6d00 Delete type=0 #3
