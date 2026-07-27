@@ -49,7 +49,8 @@ def _store_completed_workbook(workbook, filename: str) -> str:
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    # Starlette 0.29+ expects the Request as the first argument.
+    return templates.TemplateResponse(request, "index.html")
 
 
 @app.post("/upload")
